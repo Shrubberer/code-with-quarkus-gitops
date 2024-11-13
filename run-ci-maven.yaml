@@ -1,0 +1,24 @@
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  generateName: ci-pipeline-maven-run-
+spec:
+  pipelineRef:
+    name: ci-pipeline-maven
+  taskRunTemplate:
+    serviceAccountName: pipeline  
+  workspaces:
+    - name: work
+      volumeClaimTemplate:
+        apiVersion: v1
+        kind: PersistentVolumeClaim
+        metadata:
+          creationTimestamp: null
+          name: pipeline-pvc
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 500Mi
+

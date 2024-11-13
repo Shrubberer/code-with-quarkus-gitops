@@ -1,0 +1,119 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: ci-pipeline-maven
+spec:
+  params:
+  - description: git url
+    name: git-url
+    default: https://github.com/Shrubberer/code-with-quarkus.git
+    type: string
+  - description: context dir
+    name: context-dir
+    type: string
+    default: ""
+  tasks:
+  - name: git-clone
+    params:
+    - name: url
+      value: $(params.git-url)
+    - name: revision
+      value: dev
+    - name: refspec
+      value: ""
+    - name: submodules
+      value: "true"
+    - name: depth
+      value: "1"
+    - name: sslVerify
+      value: "true"
+    - name: crtFileName
+      value: ca-bundle.crt
+    - name: subdirectory
+      value: ""
+    - name: sparseCheckoutDirectories
+      value: ""
+    - name: deleteExisting
+      value: "true"
+    - name: httpProxy
+      value: ""
+    - name: httpsProxy
+      value: ""
+    - name: noProxy
+      value: ""
+    - name: verbose
+      value: "true"
+    - name: gitInitImage
+      value: registry.redhat.io/openshift-pipelines/pipelines-git-init-rhel8@sha256:f5206d183e4bdaa90800f349c6cd6a5ee62741dd944fa34e08c44ec0c125869d
+    - name: userHome
+      value: /home/git
+    taskRef:
+      kind: ClusterTask
+      name: git-clone
+    workspaces:
+    - name: output
+      workspace: work
+  - name: build-image
+    params:
+      - name: CONTEXT_DIR
+        value: $(params.context-dir)
+      - name: GOALS
+        value:
+          - verify
+    runAfter:
+    - git-clone
+    taskRef:
+      kind: ClusterTask
+      name: maven
+    workspaces:
+    - name: source
+      workspace: work
+    - name: maven-settings
+      workspace: work
+
+  - name: buildah
+    params:
+      - name: IMAGE
+        value: 'image-registry.openshift-image-registry.svc:5000/sellism-dev/code-with-quarkus'
+      - name: BUILDER_IMAGE
+        value: 'registry.redhat.io/rhel8/buildah@sha256:aac6629389db17e99894c5bee0da01d4c8065d11d8c6f6e1602f9484290baa70'
+      - name: STORAGE_DRIVER
+        value: vfs
+      - name: DOCKERFILE
+        value: ./Dockerfile
+      - name: CONTEXT
+        value: $(params.context-dir)
+      - name: TLSVERIFY
+        value: 'true'
+      - name: FORMAT
+        value: oci
+      - name: BUILD_EXTRA_ARGS
+        value: ''
+      - name: PUSH_EXTRA_ARGS
+        value: ''
+      - name: SKIP_PUSH
+        value: 'false'
+    runAfter:
+      - build-image
+    taskRef:
+      kind: ClusterTask
+      name: buildah
+    workspaces:
+      - name: source
+        workspace: work
+
+  - name: apply-manifests
+    params:
+      - name: manifest_dir
+        value: 'k8s'
+    runAfter: 
+      - buildah
+    taskRef:
+      kind: Task
+      name: apply-manifests
+    workspaces:
+      - name: source
+        workspace: work
+ 
+  workspaces:
+  - name: work
