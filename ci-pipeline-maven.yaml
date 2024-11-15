@@ -1,24 +1,28 @@
 apiVersion: tekton.dev/v1
 kind: Pipeline
 metadata:
+  annotations:
   name: ci-pipeline-maven
 spec:
   params:
-  - description: git url
+  - default: https://github.com/Shrubberer/code-with-quarkus.git
+    description: git url
     name: git-url
-    default: https://github.com/Shrubberer/code-with-quarkus.git
     type: string
-  - description: context dir
+  - default: .
+    description: context dir
     name: context-dir
     type: string
-    default: ""
+  - default: main
+    name: branch
+    type: string
   tasks:
   - name: git-clone
     params:
     - name: url
       value: $(params.git-url)
     - name: revision
-      value: dev
+      value: $(params.branch)
     - name: refspec
       value: ""
     - name: submodules
@@ -55,11 +59,11 @@ spec:
       workspace: work
   - name: build-image
     params:
-      - name: CONTEXT_DIR
-        value: $(params.context-dir)
-      - name: GOALS
-        value:
-          - verify
+    - name: CONTEXT_DIR
+      value: $(params.context-dir)
+    - name: GOALS
+      value:
+      - verify
     runAfter:
     - git-clone
     taskRef:
@@ -70,50 +74,59 @@ spec:
       workspace: work
     - name: maven-settings
       workspace: work
-
   - name: buildah
     params:
-      - name: IMAGE
-        value: 'image-registry.openshift-image-registry.svc:5000/sellism-dev/code-with-quarkus'
-      - name: BUILDER_IMAGE
-        value: 'registry.redhat.io/rhel8/buildah@sha256:aac6629389db17e99894c5bee0da01d4c8065d11d8c6f6e1602f9484290baa70'
-      - name: STORAGE_DRIVER
-        value: vfs
-      - name: DOCKERFILE
-        value: ./Dockerfile
-      - name: CONTEXT
-        value: $(params.context-dir)
-      - name: TLSVERIFY
-        value: 'true'
-      - name: FORMAT
-        value: oci
-      - name: BUILD_EXTRA_ARGS
-        value: ''
-      - name: PUSH_EXTRA_ARGS
-        value: ''
-      - name: SKIP_PUSH
-        value: 'false'
+    - name: IMAGE
+      value: image-registry.openshift-image-registry.svc:5000/cbc/code-with-quarkus:$(params.branch)
+    - name: BUILDER_IMAGE
+      value: registry.redhat.io/rhel8/buildah@sha256:aac6629389db17e99894c5bee0da01d4c8065d11d8c6f6e1602f9484290baa70
+    - name: STORAGE_DRIVER
+      value: vfs
+    - name: DOCKERFILE
+      value: ./Dockerfile
+    - name: CONTEXT
+      value: $(params.context-dir)
+    - name: TLSVERIFY
+      value: "true"
+    - name: FORMAT
+      value: oci
+    - name: BUILD_EXTRA_ARGS
+      value: ""
+    - name: PUSH_EXTRA_ARGS
+      value: ""
+    - name: SKIP_PUSH
+      value: "false"
     runAfter:
-      - build-image
+    - build-image
     taskRef:
       kind: ClusterTask
       name: buildah
     workspaces:
-      - name: source
-        workspace: work
-
+    - name: source
+      workspace: work
   - name: apply-manifests
     params:
-      - name: manifest_dir
-        value: 'k8s'
-    runAfter: 
-      - buildah
+    - name: manifest_dir
+      value: k8s
+    runAfter:
+    - openshift-client
     taskRef:
       kind: Task
       name: apply-manifests
     workspaces:
-      - name: source
-        workspace: work
- 
+    - name: source
+      workspace: work
+  - name: openshift-client
+    params:
+    - name: SCRIPT
+      value: "oc get is \noc tag $(tasks.buildah.results.IMAGE_URL)@$(tasks.buildah.results.IMAGE_DIGEST)
+        code-with-quarkus:$(params.branch)\n"
+    - name: VERSION
+      value: latest
+    runAfter:
+    - buildah
+    taskRef:
+      kind: ClusterTask
+      name: openshift-client
   workspaces:
   - name: work

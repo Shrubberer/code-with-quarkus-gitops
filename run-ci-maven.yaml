@@ -5,6 +5,9 @@ metadata:
 spec:
   pipelineRef:
     name: ci-pipeline-maven
+  params:
+    - name: branch
+      value: v8
   taskRunTemplate:
     serviceAccountName: pipeline  
   workspaces:
