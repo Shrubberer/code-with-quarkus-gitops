@@ -13,7 +13,7 @@ spec:
     description: context dir
     name: context-dir
     type: string
-  - default: main
+  - default: master
     name: branch
     type: string
   tasks:
@@ -71,8 +71,6 @@ spec:
       name: maven
     workspaces:
     - name: source
-      workspace: work
-    - name: maven-settings
       workspace: work
   - name: buildah
     params:
